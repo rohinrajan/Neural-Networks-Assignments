@@ -15,7 +15,7 @@ import colorsys
 from os import listdir
 from os.path import isfile , join
 
-
+CONST_MAX_EPOCH = 1000
 class ClDataSet:
     # This class encapsulates the data set
     # The data set includes input samples and targets
@@ -48,7 +48,15 @@ class ClMnistDataSet:
             image_vector = readImage.read_one_image_and_convert_to_vector(path)
             self.samples = np.hstack([self.samples,image_vector])
         self.targets = self.generate_target_vector(mnist_targets)
-        print self.targets.shape
+
+        # now shuffling the data set
+        self.samples, self.targets = self.shuffle_in_unison(self.samples.T,self.targets.T)
+
+    #     -------------------------------This is a test run
+    #     mnist_db_file = join(mnist_db_location,"0_00001.png")
+    #     self.samples = readImage.read_one_image_and_convert_to_vector(mnist_db_file)
+    #     mnist_db_target = "0"
+    #     self.targets = self.generate_target_vector(mnist_db_target)
 
     # method to generate the target matrix
     def generate_target_vector(self, target_values):
@@ -58,7 +66,17 @@ class ClMnistDataSet:
             target_matrix[indx][int(val)] = 1
         return target_matrix.T
 
-
+    # method to shuffle both the input samples and target matrix dimensions are input_samples 1000 * 784
+    # target is also in the dimensions 1000 * 10 in this case they should be in the same length
+    def shuffle_in_unison(self,input_sample, target):
+        shuffled_input = np.empty(input_sample.shape, dtype=input_sample.dtype)
+        shuffled_target = np.empty(target.shape, dtype=target.dtype)
+        permutation = np.random.permutation(len(input_sample))
+        for old_index, new_index in enumerate(permutation):
+            shuffled_input[new_index] = input_sample[old_index]
+            shuffled_target[new_index] = target[old_index]
+            # return the transposed values
+        return shuffled_input.T, shuffled_target.T
 
 
 
@@ -69,7 +87,7 @@ nn_experiment_default_settings = {
     "min_initial_weights": -0.1,  # minimum initial weight
     "max_initial_weights": 0.1,  # maximum initial weight
     "number_of_inputs": 784,  # number of inputs to the network
-    "learning_rate": 0.1,  # learning rate
+    "learning_rate": 0.001,  # learning rate
     "momentum": 0.1,  # momentum
     "batch_size": 0,  # 0 := entire trainingset as a batch
     "layers_specification": [{"number_of_neurons": 10, "activation_function": "linear"}],  # list of dictionaries
@@ -164,7 +182,7 @@ class ClNNExperiment:
 
     def adjust_weights(self):
         self.neural_network.adjust_weights(self.data_set.samples,
-                                           self.data_set.targets)
+                                           self.data_set.targets, self.neural_network.output)
 
 
 class ClNNGui2d:
@@ -179,10 +197,10 @@ class ClNNGui2d:
         #
         self.nn_experiment = nn_experiment
         self.number_of_classes = self.nn_experiment.number_of_classes
-        self.xmin = -2
-        self.xmax = 2
-        self.ymin = -2
-        self.ymax = 2
+        self.xmin = 1
+        self.xmax = 1000
+        self.ymin = 0
+        self.ymax = 100
         self.master.update()
         self.number_of_samples_in_each_class = self.nn_experiment.number_of_samples_in_each_class
         self.learning_rate = self.nn_experiment.learning_rate
@@ -211,9 +229,7 @@ class ClNNGui2d:
         self.display_frame.columnconfigure(0, weight=1)
         self.figure = plt.figure("Multiple Linear Classifiers")
         self.axes = self.figure.add_subplot(111)
-        self.figure = plt.figure("Multiple Linear Classifiers")
-        self.axes = self.figure.add_subplot(111)
-        plt.title("Multiple Linear Classifiers")
+        plt.title("Hebb Rule Error Rate")
         plt.scatter(0, 0)
         plt.xlim(self.xmin, self.xmax)
         plt.ylim(self.ymin, self.ymax)
@@ -237,7 +253,7 @@ class ClNNGui2d:
         self.learning_rate_slider_label = Tk.Label(self.sliders_frame, text="Learning Rate")
         self.learning_rate_slider_label.grid(row=0, column=0, sticky=Tk.N + Tk.E + Tk.S + Tk.W)
         self.learning_rate_slider = Tk.Scale(self.sliders_frame, variable=Tk.DoubleVar(), orient=Tk.HORIZONTAL,
-                                             from_=0.001, to_=1, resolution=0.01, bg="#DDDDDD",
+                                             from_=0.0001, to_=1, resolution=0.0001, bg="#DDDDDD",
                                              activebackground="#FF0000",
                                              highlightcolor="#00FFFF", width=10,
                                              command=lambda event: self.learning_rate_slider_callback())
@@ -296,13 +312,13 @@ class ClNNGui2d:
     def initialize(self):
         #self.nn_experiment.create_samples()
         self.nn_experiment.neural_network.randomize_weights()
-        self.neighborhood_colors = plt.cm.get_cmap('Accent')
-        self.sample_points_colors = plt.cm.get_cmap('Dark2')
-        self.xx, self.yy = np.meshgrid(np.arange(self.xmin, self.xmax + 0.5 * self.step_size, self.step_size),
-                                       np.arange(self.ymin, self.ymax + 0.5 * self.step_size, self.step_size))
-        self.convert_binary_to_integer = []
-        for k in range(0, self.nn_experiment.neural_network.layers[-1].number_of_neurons):
-            self.convert_binary_to_integer.append(2 ** k)
+        # self.neighborhood_colors = plt.cm.get_cmap('Accent')
+        # self.sample_points_colors = plt.cm.get_cmap('Dark2')
+        # self.xx, self.yy = np.meshgrid(np.arange(self.xmin, self.xmax + 0.5 * self.step_size, self.step_size),
+        #                                np.arange(self.ymin, self.ymax + 0.5 * self.step_size, self.step_size))
+        # self.convert_binary_to_integer = []
+        # for k in range(0, self.nn_experiment.neural_network.layers[-1].number_of_neurons):
+        #     self.convert_binary_to_integer.append(2 ** k)
 
     def display_samples_on_image(self):
         # Display the samples for each class
@@ -352,7 +368,7 @@ class ClNNGui2d:
             self.axes.plot(*data)
 
     def learning_rate_slider_callback(self):
-        self.learning_rate = self.learning_rate_slider.get()
+        # self.learning_rate = self.learning_rate_slider.get()
         self.nn_experiment.learning_rate = self.learning_rate
         self.nn_experiment.neural_network.learning_rate = self.learning_rate
         self.adjusted_learning_rate = self.learning_rate / self.number_of_samples_in_each_class
@@ -384,9 +400,9 @@ class ClNNGui2d:
     def adjust_weights_button_callback(self):
         temp_text = self.adjust_weights_button.config('text')[-1]
         self.adjust_weights_button.config(text='Please Wait')
-        #for k in range(10):
-        self.nn_experiment.adjust_weights()
-        #self.refresh_display()
+        for k in range(300):
+            self.nn_experiment.adjust_weights()
+        # self.refresh_display()
         self.adjust_weights_button.config(text=temp_text)
         self.adjust_weights_button.update_idletasks()
 
@@ -411,7 +427,8 @@ class ClNNGui2d:
         self.print_nn_parameters_button.update_idletasks()
 
     def hebb_learning_rules_dropdown_callback(self):
-        # setting the hebb learning rate
+        # setting the hebb learning rule
+        self.nn_experiment.neural_network.randomize_weights()
         self.nn_experiment.neural_network.hebb_learning_variable = self.hebb_learning_variable.get()
 
 
@@ -420,7 +437,7 @@ neural_network_default_settings = {
     "min_initial_weights": -0.1,  # minimum initial weight
     "max_initial_weights": 0.1,  # maximum initial weight
     "number_of_inputs": 784,  # number of inputs to the network
-    "learning_rate": 0.1,  # learning rate
+    "learning_rate": 0.001,  # learning rate
     "momentum": 0.1,  # momentum
     "batch_size": 0,  # 0 := entire trainingset as a batch
     "layers_specification": [{"number_of_neurons": 10,
@@ -463,6 +480,15 @@ class ClNeuralNetwork:
                 "\nActivation Function : ", layer.activation_function, \
                 "\nWeights : ", layer.weights
 
+    def alterate_output(self, output_transpose):
+        new_output = np.zeros(shape=[10,0])
+        for indx in range(len(output_transpose)):
+            current_output = np.zeros(shape=[10,1])
+            maxval = np.argmax(output_transpose[indx].reshape(10,1))
+            current_output[maxval] = 1
+            new_output = np.hstack([new_output,current_output])
+        return new_output
+
     def calculate_output(self, input_values):
         # Calculate the output of the network, given the input signals
         for layer_index, layer in enumerate(self.layers):
@@ -470,45 +496,51 @@ class ClNeuralNetwork:
                 output = layer.calculate_output(input_values)
             else:
                 output = layer.calculate_output(output)
-        self.output = output
+        # self.output = output
+        self.output = self.alterate_output(output.T)
         return self.output
 
-    def adjust_weights(self, input_samples, targets):
-         # Appending 1 to the input_samples in order to accomodate the bias
+    # calculating the error rate for the given input_samples
+    def calculate_error_rate(self, actual_result, target_matrix_transpose):
+        error = 0
+        self.error_rate = []
+        for indx in range(len(actual_result)):
+            # getting the index of the max value which the actual result is present
+            actual_max_indx = np.argmax(actual_result[indx])
+            # getting the findx of the max value which the target result is present
+            target_max_indx = np.argmax(target_matrix_transpose[indx])
+            # checking to see if the indeces match if not then get the error
+            if actual_max_indx != target_max_indx:
+                error += 1
+        print error
+
+    def adjust_weights(self, input_samples, targets, actual_output):
+        # Appending 1 to the input_samples in order to accommodate the bias
         if len(input_samples.shape) == 1:
             tmp_samples = np.append(input_samples, 1)
         else:
             tmp_samples = np.vstack([input_samples, np.ones((1, input_samples.shape[1]), float)])
-        # # Calculating the error but taking the dot product of the error (desired_target_vectors - calculate_output)
-        # # and the transpose of the input_samples
-        # # multiplying the learning rate with the error and input_samples
-        # new_error = self.learning_rate * np.dot(error, input_samples.T)
-        # # now adjusting the weights for each layer
-        # for layer in self.layers:
-        #     layer.weights = layer.weights + new_error
 
-        # checking to see which rule has to be applied
-        if self.hebb_learning_variable == "Filtered Learning":
-            gamma_value = 1 - self.learning_rate
-            for i in range(1000):
-                for layer in self.layers:
-                    correction = self.learning_rate * np.dot(targets, tmp_samples.T)
-                    layer.weights = (gamma_value * layer.weights) + correction
-
-            print "net"
-            temp =  self.calculate_output(input_samples).T
-            target_temp = targets.T
-            for indx in range(1000):
-                print np.argmax(temp[indx])
-                print "target = " + str(indx)
-                print target_temp[indx]
-
-        elif self.hebb_learning_variable == "Delta Rule":
-            pass
-            # assuming else to be unsupervised hebb rule
-        else:
-            pass
-
+        # checking to see if any of the hebb rule is selected
+        if self.hebb_learning_variable == "Filtered Learning" or self.hebb_learning_variable == "Delta Rule" \
+                or self.hebb_learning_variable == "Unsupervised Hebb":
+            error = targets - actual_output
+            for indx in range(len(tmp_samples.T)):
+                ind_target = targets.T[indx].reshape(10,1)
+                ind_input_sample = tmp_samples.T[indx].reshape(1,785)
+                if self.hebb_learning_variable == "Filtered Learning":
+                    gamma_value = 1 - self.learning_rate
+                    for layer in self.layers:
+                        correction = self.learning_rate * np.dot(ind_target,ind_input_sample)
+                        layer.weights = (gamma_value * layer.weights) + correction
+                elif self.hebb_learning_variable == "Delta Rule":
+                    ind_error = error.T[indx].reshape(10,1)
+                    for layer in self.layers:
+                        layer.weights = layer.weights + self.learning_rate * np.dot(ind_error,ind_input_sample)
+                else:
+                    for layer in self.layers:
+                        layer.weights = layer.weights + self.learning_rate * np.dot(actual_output,tmp_samples.T)
+            self.calculate_error_rate(self.calculate_output(input_samples).T, targets.T)
 
 single_layer_default_settings = {
     # Optional settings
@@ -539,8 +571,6 @@ class ClSingleLayer:
         self.weights = np.random.uniform(min_initial_weights, max_initial_weights,
                                          (self.number_of_neurons, self.number_of_inputs_to_layer + 1))
 
-
-
     def calculate_output(self, input_values):
         # Calculate the output of the layer, given the input signals
         # NOTE: Input is assumed to be a column vector. If the input
@@ -566,7 +596,7 @@ if __name__ == "__main__":
         "min_initial_weights": -0.1,  # minimum initial weight
         "max_initial_weights": 0.1,  # maximum initial weight
         "number_of_inputs": 784,  # number of inputs to the network
-        "learning_rate": 0.1,  # learning rate
+        "learning_rate": 0.001,  # learning rate
         "layers_specification": [{"number_of_neurons": 10, "activation_function": "linear"}],  # list of dictionaries
         "data_set": ClMnistDataSet(),
         'number_of_classes': 10,
