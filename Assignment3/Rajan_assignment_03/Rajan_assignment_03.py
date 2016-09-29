@@ -15,7 +15,6 @@ import colorsys
 from os import listdir
 from os.path import isfile , join
 
-CONST_MAX_EPOCH = 1000
 class ClDataSet:
     # This class encapsulates the data set
     # The data set includes input samples and targets
@@ -43,7 +42,8 @@ class ClMnistDataSet:
         # extracting the target values for each of the input values
         mnist_targets = [ f.split("_")[0] for f in listdir(mnist_db_location)]
         # reading the input images and generating an input matrix
-        self.samples = np.empty(shape=[784,0])
+        sample_vector_dimentions = readImage.read_one_image_and_convert_to_vector(mnist_db_files[0]).shape[0]
+        self.samples = np.empty(shape=[sample_vector_dimentions,0]) # getting the dimensions from the first image
         for path in mnist_db_files:
             image_vector = readImage.read_one_image_and_convert_to_vector(path)
             self.samples = np.hstack([self.samples,image_vector])
@@ -51,12 +51,6 @@ class ClMnistDataSet:
 
         # now shuffling the data set
         self.samples, self.targets = self.shuffle_in_unison(self.samples.T,self.targets.T)
-
-    #     -------------------------------This is a test run
-    #     mnist_db_file = join(mnist_db_location,"0_00001.png")
-    #     self.samples = readImage.read_one_image_and_convert_to_vector(mnist_db_file)
-    #     mnist_db_target = "0"
-    #     self.targets = self.generate_target_vector(mnist_db_target)
 
     # method to generate the target matrix
     def generate_target_vector(self, target_values):
@@ -138,52 +132,14 @@ class ClNNExperiment:
             print "Size of the output is not the same as the size of the target.", \
                 "Error cannot be calculated."
 
-    def create_samples(self):
-        self.sample_colors = []
-        normalized_x_range_of_classes = []
-        normalized_y_range_of_classes = []
-        for k in range(self.number_of_classes):
-            # set the x range of data for each class
-            xmin = np.random.uniform(-1.0, .9)
-            xmax = np.random.uniform(xmin + .05, 1.0)
-            normalized_x_range_of_classes.append([xmin, xmax])
-            # set the y range of data for each clas
-            ymin = np.random.uniform(-1.0, .9)
-            ymax = np.random.uniform(ymin + .05, 1.0)
-            normalized_y_range_of_classes.append([ymin, ymax])
-        normalized_x_range_of_classes = np.array(normalized_x_range_of_classes)
-        normalized_y_range_of_classes = np.array(normalized_y_range_of_classes)
-        sample_points_x1 = []
-        sample_points_x2 = []
-        self.target = []
-        self.desired_target_vectors = np.zeros(
-            (self.number_of_classes, self.number_of_classes * self.number_of_samples_in_each_class), int)
-        for class_index in range(0, self.number_of_classes):
-            if normalized_x_range_of_classes[class_index][0] >= normalized_x_range_of_classes[class_index][1]:
-                normalized_x_range_of_classes[class_index][0], normalized_x_range_of_classes[class_index][1] = \
-                    normalized_x_range_of_classes[class_index][1], normalized_x_range_of_classes[class_index][0] + 0.01
-            if normalized_y_range_of_classes[class_index][0] >= normalized_y_range_of_classes[class_index][1]:
-                normalized_y_range_of_classes[class_index][0], normalized_y_range_of_classes[class_index][1] = \
-                    normalized_y_range_of_classes[class_index][1], normalized_y_range_of_classes[class_index][0] + 0.01
-            temp_sample_points_x1 = np.random.uniform(
-                normalized_x_range_of_classes[class_index][0],
-                normalized_x_range_of_classes[class_index][1],
-                self.number_of_samples_in_each_class)
-            temp_sample_points_x2 = np.random.uniform(
-                normalized_y_range_of_classes[class_index][0],
-                normalized_y_range_of_classes[class_index][1],
-                self.number_of_samples_in_each_class)
-            sample_points_x1.extend(temp_sample_points_x1)
-            sample_points_x2.extend(temp_sample_points_x2)
-            self.target.extend(self.number_of_samples_in_each_class * [class_index])
-            self.desired_target_vectors[class_index,
-            class_index * self.number_of_samples_in_each_class:class_index * self.number_of_samples_in_each_class + self.number_of_samples_in_each_class] = 1
-        self.data_set.samples = np.stack((sample_points_x1, sample_points_x2), axis=0)
 
     def adjust_weights(self):
         self.neural_network.adjust_weights(self.data_set.samples,
                                            self.data_set.targets, self.neural_network.output)
 
+    def calculate_error_rate(self):
+        return self.neural_network.calculate_error_rate(self.neural_network.calculate_output(self.data_set.samples).T,
+                                                        self.data_set.targets.T)
 
 class ClNNGui2d:
     """
@@ -203,6 +159,7 @@ class ClNNGui2d:
         self.ymax = 100
         self.master.update()
         self.number_of_samples_in_each_class = self.nn_experiment.number_of_samples_in_each_class
+        self.number_of_epooch = 10
         self.learning_rate = self.nn_experiment.learning_rate
         self.adjusted_learning_rate = self.learning_rate / self.number_of_samples_in_each_class
         self.step_size = 0.02
@@ -221,7 +178,9 @@ class ClNNGui2d:
         self.master.rowconfigure(1, weight=1, uniform="group1")
         self.master.columnconfigure(0, weight=2, uniform="group1")
         self.master.columnconfigure(1, weight=1, uniform="group1")
-
+        self.error_rate_counter = 0
+        self.error_list = []
+        self.index_list = []
         self.canvas = Tk.Canvas(self.master)
         self.display_frame = Tk.Frame(self.master)
         self.display_frame.grid(row=0, column=0, columnspan=2, sticky=Tk.N + Tk.E + Tk.S + Tk.W)
@@ -264,26 +223,22 @@ class ClNNGui2d:
         self.number_of_classes_slider_label = Tk.Label(self.sliders_frame, text="Number of Classes")
         self.number_of_classes_slider_label.grid(row=1, column=0, sticky=Tk.N + Tk.E + Tk.S + Tk.W)
         self.number_of_classes_slider = Tk.Scale(self.sliders_frame, variable=Tk.IntVar(), orient=Tk.HORIZONTAL,
-                                                 from_=2, to_=5, bg="#DDDDDD",
+                                                 from_=2, to_=15, bg="#DDDDDD",
                                                  activebackground="#FF0000",
                                                  highlightcolor="#00FFFF", width=10)
         self.number_of_classes_slider.set(self.number_of_classes)
         self.number_of_classes_slider.bind("<ButtonRelease-1>", lambda event: self.number_of_classes_slider_callback())
         self.number_of_classes_slider.grid(row=1, column=1, sticky=Tk.N + Tk.E + Tk.S + Tk.W)
-        self.number_of_samples_slider = Tk.Scale(self.sliders_frame, variable=ivar, orient=Tk.HORIZONTAL,
-                                                 from_=2, to_=20, bg="#DDDDDD",
-                                                 activebackground="#FF0000",
-                                                 highlightcolor="#00FFFF", width=10)
-        self.number_of_samples_slider_label = Tk.Label(self.sliders_frame, text="Number of Samples")
-        self.number_of_samples_slider_label.grid(row=2, column=0, sticky=Tk.N + Tk.E + Tk.S + Tk.W)
-        self.number_of_samples_slider.bind("<ButtonRelease-1>", lambda event: self.number_of_samples_slider_callback())
-        self.number_of_samples_slider.set(self.number_of_samples_in_each_class)
-        self.number_of_samples_slider.grid(row=2, column=1, sticky=Tk.N + Tk.E + Tk.S + Tk.W)
-        self.create_new_samples_bottun = Tk.Button(self.buttons_frame,
-                                                   text="Create New Samples",
-                                                   bg="yellow", fg="red",
-                                                   command=lambda: self.create_new_samples_bottun_callback())
-        self.create_new_samples_bottun.grid(row=0, column=0, sticky=Tk.N + Tk.E + Tk.S + Tk.W)
+        self.number_of_epooch_slider_label = Tk.Label(self.sliders_frame, text="Number of Epooch")
+        self.number_of_epooch_slider_label.grid(row=2, column=0, sticky=Tk.N + Tk.E + Tk.S + Tk.W)
+        self.number_of_epooch_slider = Tk.Scale(self.sliders_frame, variable=Tk.DoubleVar(), orient=Tk.HORIZONTAL,
+                                             from_=1, to_=1000, resolution=10, bg="#DDDDDD",
+                                             activebackground="#FF0000",
+                                             highlightcolor="#00FFFF", width=10,
+                                             command=lambda event: self.number_of_epooch_slider_callback())
+        self.number_of_epooch_slider.set(self.number_of_epooch)
+        self.number_of_epooch_slider.bind("<ButtonRelease-1>", lambda event: self.number_of_epooch_slider_callback())
+        self.number_of_epooch_slider.grid(row=2, column=1, sticky=Tk.N + Tk.E + Tk.S + Tk.W)
         self.randomize_weights_button = Tk.Button(self.buttons_frame,
                                                   text="Randomize Weights",
                                                   bg="yellow", fg="red",
@@ -310,15 +265,7 @@ class ClNNGui2d:
         self.refresh_display()
 
     def initialize(self):
-        #self.nn_experiment.create_samples()
         self.nn_experiment.neural_network.randomize_weights()
-        # self.neighborhood_colors = plt.cm.get_cmap('Accent')
-        # self.sample_points_colors = plt.cm.get_cmap('Dark2')
-        # self.xx, self.yy = np.meshgrid(np.arange(self.xmin, self.xmax + 0.5 * self.step_size, self.step_size),
-        #                                np.arange(self.ymin, self.ymax + 0.5 * self.step_size, self.step_size))
-        # self.convert_binary_to_integer = []
-        # for k in range(0, self.nn_experiment.neural_network.layers[-1].number_of_neurons):
-        #     self.convert_binary_to_integer.append(2 ** k)
 
     def display_samples_on_image(self):
         # Display the samples for each class
@@ -335,74 +282,32 @@ class ClNNGui2d:
 
     def refresh_display(self):
         self.nn_experiment.neural_network.calculate_output(self.nn_experiment.data_set.samples)
-        #self.display_neighborhoods()
-
-    def display_neighborhoods(self):
-        self.class_ids = []
-        for x, y in np.stack((self.xx.ravel(), self.yy.ravel()), axis=-1):
-            output = self.nn_experiment.neural_network.calculate_output(np.array([x, y]))
-            self.class_ids.append(output.dot(self.convert_binary_to_integer))
-        self.class_ids = np.array(self.class_ids)
-        self.class_ids = self.class_ids.reshape(self.xx.shape)
-        self.axes.cla()
-        self.axes.pcolormesh(self.xx, self.yy, self.class_ids, cmap=self.neighborhood_colors)
-        self.display_output_nodes_net_boundaries()
-        self.display_samples_on_image()
-
-    def display_output_nodes_net_boundaries(self):
-        output_layer = self.nn_experiment.neural_network.layers[-1]
-        for output_neuron_index in range(output_layer.number_of_neurons):
-            w1 = output_layer.weights[output_neuron_index][0]
-            w2 = output_layer.weights[output_neuron_index][1]
-            w3 = output_layer.weights[output_neuron_index][2]
-            if w1 == 0 and w2 == 0:
-                data = [(0, 0), (0, 0), 'r']
-            elif w1 == 0:
-                data = [(self.xmin, self.xmax), (float(w3) / w2, float(w3) / w2), 'r']
-            elif w2 == 0:
-                data = [(float(-w3) / w1, float(-w3) / w1), (self.ymin, self.ymax), 'r']
-            else:
-                data = [(self.xmin, self.xmax),  # in form of (x1, x2), (y1, y2)
-                        ((-w3 - float(w1 * self.xmin)) / w2,
-                         (-w3 - float(w1 * self.xmax)) / w2), 'r']
-            self.axes.plot(*data)
 
     def learning_rate_slider_callback(self):
-        # self.learning_rate = self.learning_rate_slider.get()
         self.nn_experiment.learning_rate = self.learning_rate
         self.nn_experiment.neural_network.learning_rate = self.learning_rate
         self.adjusted_learning_rate = self.learning_rate / self.number_of_samples_in_each_class
         self.refresh_display()
 
     def number_of_classes_slider_callback(self):
+        self.number_of_classes_slider.set(10)
         self.number_of_classes = self.number_of_classes_slider.get()
-        self.nn_experiment.number_of_classes = self.number_of_classes
-        self.nn_experiment.neural_network.layers[-1].number_of_neurons = self.number_of_classes
-        self.nn_experiment.neural_network.randomize_weights()
-        self.initialize()
-        self.refresh_display()
 
-    def number_of_samples_slider_callback(self):
-        self.number_of_samples_in_each_class = self.number_of_samples_slider.get()
-        self.nn_experiment.number_of_samples_in_each_class = self.number_of_samples_slider.get()
-        #self.nn_experiment.create_samples()
-        self.refresh_display()
+    def number_of_epooch_slider_callback(self):
+        self.number_of_epooch = self.number_of_epooch_slider.get()
 
-    def create_new_samples_bottun_callback(self):
-        temp_text = self.create_new_samples_bottun.config('text')[-1]
-        self.create_new_samples_bottun.config(text='Please Wait')
-        self.create_new_samples_bottun.update_idletasks()
-        #self.nn_experiment.create_samples()
-        self.refresh_display()
-        self.create_new_samples_bottun.config(text=temp_text)
-        self.create_new_samples_bottun.update_idletasks()
 
     def adjust_weights_button_callback(self):
         temp_text = self.adjust_weights_button.config('text')[-1]
         self.adjust_weights_button.config(text='Please Wait')
-        for k in range(300):
+        for k in range(self.number_of_epooch):
             self.nn_experiment.adjust_weights()
-        # self.refresh_display()
+            error_rate = self.nn_experiment.calculate_error_rate()
+            self.index_list.append(self.error_rate_counter+k)
+            self.error_list.append(error_rate)
+            self.axes.plot(self.index_list,self.error_list)
+            self.canvas.draw()
+        self.error_rate_counter +=self.number_of_epooch
         self.adjust_weights_button.config(text=temp_text)
         self.adjust_weights_button.update_idletasks()
 
@@ -411,8 +316,6 @@ class ClNNGui2d:
         self.randomize_weights_button.config(text='Please Wait')
         self.randomize_weights_button.update_idletasks()
         self.nn_experiment.neural_network.randomize_weights()
-        # self.nn_experiment.neural_network.display_network_parameters()
-        # self.nn_experiment.run_forward_pass()
         self.refresh_display()
         self.randomize_weights_button.config(text=temp_text)
         self.randomize_weights_button.update_idletasks()
@@ -428,7 +331,6 @@ class ClNNGui2d:
 
     def hebb_learning_rules_dropdown_callback(self):
         # setting the hebb learning rule
-        self.nn_experiment.neural_network.randomize_weights()
         self.nn_experiment.neural_network.hebb_learning_variable = self.hebb_learning_variable.get()
 
 
@@ -500,19 +402,21 @@ class ClNeuralNetwork:
         self.output = self.alterate_output(output.T)
         return self.output
 
-    # calculating the error rate for the given input_samples
-    def calculate_error_rate(self, actual_result, target_matrix_transpose):
+    # calculating the error rate for the given input_samples transpose as well as the actual result transpose
+    def calculate_error_rate(self, actual_result_transpose, target_matrix_transpose):
         error = 0
         self.error_rate = []
-        for indx in range(len(actual_result)):
+        for indx in range(len(actual_result_transpose)):
             # getting the index of the max value which the actual result is present
-            actual_max_indx = np.argmax(actual_result[indx])
+            actual_max_indx = np.argmax(actual_result_transpose[indx])
             # getting the findx of the max value which the target result is present
             target_max_indx = np.argmax(target_matrix_transpose[indx])
             # checking to see if the indeces match if not then get the error
             if actual_max_indx != target_max_indx:
                 error += 1
-        print error
+        error_float = error / float(len(actual_result_transpose))
+        error_float *= 100
+        return error_float
 
     def adjust_weights(self, input_samples, targets, actual_output):
         # Appending 1 to the input_samples in order to accommodate the bias
@@ -525,9 +429,13 @@ class ClNeuralNetwork:
         if self.hebb_learning_variable == "Filtered Learning" or self.hebb_learning_variable == "Delta Rule" \
                 or self.hebb_learning_variable == "Unsupervised Hebb":
             error = targets - actual_output
-            for indx in range(len(tmp_samples.T)):
+            # fetching the total lent of the dataset
+            for indx in range(tmp_samples.shape[1]):
                 ind_target = targets.T[indx].reshape(10,1)
+                # transpose of the input sample in [ 1 * 785]
                 ind_input_sample = tmp_samples.T[indx].reshape(1,785)
+                ind_actual_output = actual_output.T[indx].reshape(10,1)
+                # fetching individual actual outputs and re-adjusting the dataset
                 if self.hebb_learning_variable == "Filtered Learning":
                     gamma_value = 1 - self.learning_rate
                     for layer in self.layers:
@@ -539,8 +447,7 @@ class ClNeuralNetwork:
                         layer.weights = layer.weights + self.learning_rate * np.dot(ind_error,ind_input_sample)
                 else:
                     for layer in self.layers:
-                        layer.weights = layer.weights + self.learning_rate * np.dot(actual_output,tmp_samples.T)
-            self.calculate_error_rate(self.calculate_output(input_samples).T, targets.T)
+                        layer.weights = layer.weights + self.learning_rate * np.dot(ind_actual_output, ind_input_sample)
 
 single_layer_default_settings = {
     # Optional settings
