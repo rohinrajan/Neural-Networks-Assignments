@@ -1,7 +1,7 @@
 # Rajan, Rohin
 # 1001-154-037
-# 2016-09-20
-# Assignment_02
+# 2016-09-29
+# Assignment_03
 
 import numpy as np
 import Tkinter as Tk
@@ -239,6 +239,9 @@ class ClNNGui2d:
         self.number_of_epooch_slider.set(self.number_of_epooch)
         self.number_of_epooch_slider.bind("<ButtonRelease-1>", lambda event: self.number_of_epooch_slider_callback())
         self.number_of_epooch_slider.grid(row=2, column=1, sticky=Tk.N + Tk.E + Tk.S + Tk.W)
+        self.reset_button = Tk.Button(self.buttons_frame, text="Reset", bg="yellow", fg="red",
+                                      command=lambda: self.reset_button_callback())
+        self.reset_button.grid(row=0, column=0, sticky=Tk.N + Tk.E + Tk.S + Tk.W)
         self.randomize_weights_button = Tk.Button(self.buttons_frame,
                                                   text="Randomize Weights",
                                                   bg="yellow", fg="red",
@@ -260,6 +263,7 @@ class ClNNGui2d:
         self.hebb_learning_rules_dropdown = Tk.OptionMenu(self.buttons_frame,self.hebb_learning_variable,
                 "Filtered Learning","Delta Rule","Unsupervised Hebb",
                 command=lambda event: self.hebb_learning_rules_dropdown_callback())
+        self.hebb_learning_variable.set("Filtered Learning")
         self.hebb_learning_rules_dropdown.grid(row=4, column=0, sticky=Tk.N + Tk.E + Tk.S + Tk.W)
         self.initialize()
         self.refresh_display()
@@ -282,6 +286,18 @@ class ClNNGui2d:
 
     def refresh_display(self):
         self.nn_experiment.neural_network.calculate_output(self.nn_experiment.data_set.samples)
+        self.canvas.draw()
+
+    def reset_button_callback(self):
+        self.error_list = []
+        self.index_list = []
+        self.error_rate_counter = 0
+        self.axes.cla()
+        plt.title("Hebb Rule Error Rate")
+        plt.scatter(0, 0)
+        plt.xlim(self.xmin, self.xmax)
+        plt.ylim(self.ymin, self.ymax)
+        self.canvas.draw()
 
     def learning_rate_slider_callback(self):
         self.nn_experiment.learning_rate = self.learning_rate
@@ -295,7 +311,6 @@ class ClNNGui2d:
 
     def number_of_epooch_slider_callback(self):
         self.number_of_epooch = self.number_of_epooch_slider.get()
-
 
     def adjust_weights_button_callback(self):
         temp_text = self.adjust_weights_button.config('text')[-1]
@@ -341,7 +356,7 @@ neural_network_default_settings = {
     "number_of_inputs": 784,  # number of inputs to the network
     "learning_rate": 0.001,  # learning rate
     "momentum": 0.1,  # momentum
-    "batch_size": 0,  # 0 := entire trainingset as a batch
+    "batch_size": 0,  # 0 := entire training set as a batch
     "layers_specification": [{"number_of_neurons": 10,
                               "activation_function": "linear"}]  # list of dictionaries
 }
@@ -382,12 +397,21 @@ class ClNeuralNetwork:
                 "\nActivation Function : ", layer.activation_function, \
                 "\nWeights : ", layer.weights
 
-    def alterate_output(self, output_transpose):
-        new_output = np.zeros(shape=[10,0])
+    # method to change the actual output / normalize the actual data
+    # In this only the max value index and set only that value 1 and remaining 0
+    def adjust_output(self, output_transpose):
+        adjust_shape_value = output_transpose.shape[1]
+        new_output = np.zeros(shape=[adjust_shape_value,0])
         for indx in range(len(output_transpose)):
-            current_output = np.zeros(shape=[10,1])
-            maxval = np.argmax(output_transpose[indx].reshape(10,1))
-            current_output[maxval] = 1
+            current_output = np.zeros(shape=[output_transpose.shape[1],1])
+            maxval = np.argmax(output_transpose[indx].reshape(output_transpose.shape[1],1))
+            # checking if the elements in the output are all equal or not
+            if not self.check_if_vector_equality(output_transpose[indx].reshape(output_transpose.shape[1],1)):
+                current_output[maxval] = 1
+                # checking to see if output elements are all greater than 0 then setting the values to 1 else the
+                # current_output would be a zero matrix that would be appened
+            elif output_transpose[indx][maxval] > 0:
+                current_output = np.ones(shape=[output_transpose.shape[1],1])
             new_output = np.hstack([new_output,current_output])
         return new_output
 
@@ -398,9 +422,15 @@ class ClNeuralNetwork:
                 output = layer.calculate_output(input_values)
             else:
                 output = layer.calculate_output(output)
-        # self.output = output
-        self.output = self.alterate_output(output.T)
+        self.output = self.adjust_output(output.T)
         return self.output
+
+    # function to check if the vector are equal or not
+    def check_if_vector_equality(self, vector_matrix):
+        # get the min value and the max value if both are the same then the elements of the vector are the same
+        minvalue = np.argmin(vector_matrix)
+        maxvalue = np.argmax(vector_matrix)
+        return minvalue == maxvalue
 
     # calculating the error rate for the given input_samples transpose as well as the actual result transpose
     def calculate_error_rate(self, actual_result_transpose, target_matrix_transpose):
@@ -411,9 +441,15 @@ class ClNeuralNetwork:
             actual_max_indx = np.argmax(actual_result_transpose[indx])
             # getting the findx of the max value which the target result is present
             target_max_indx = np.argmax(target_matrix_transpose[indx])
-            # checking to see if the indeces match if not then get the error
-            if actual_max_indx != target_max_indx:
+            # check to see if the elements in the matrix are equal or not
+            if not self.check_if_vector_equality(actual_result_transpose[indx]):
+                # checking to see if the indexes match if not then get the error
+                if actual_max_indx != target_max_indx:
+                    error += 1
+            else:
+                # if all the elements are equal then its an error
                 error += 1
+        # calculating error rate
         error_float = error / float(len(actual_result_transpose))
         error_float *= 100
         return error_float
@@ -425,15 +461,23 @@ class ClNeuralNetwork:
         else:
             tmp_samples = np.vstack([input_samples, np.ones((1, input_samples.shape[1]), float)])
 
+        print "actual output"
+        print actual_output
+
+        print "weights"
+        print self.layers[0].weights
+
         # checking to see if any of the hebb rule is selected
         if self.hebb_learning_variable == "Filtered Learning" or self.hebb_learning_variable == "Delta Rule" \
                 or self.hebb_learning_variable == "Unsupervised Hebb":
+            # calculating the error
             error = targets - actual_output
-            # fetching the total lent of the dataset
+            # fetching the total length of the dataset
             for indx in range(tmp_samples.shape[1]):
                 ind_target = targets.T[indx].reshape(10,1)
                 # transpose of the input sample in [ 1 * 785]
                 ind_input_sample = tmp_samples.T[indx].reshape(1,785)
+                # getting individual actual output
                 ind_actual_output = actual_output.T[indx].reshape(10,1)
                 # fetching individual actual outputs and re-adjusting the dataset
                 if self.hebb_learning_variable == "Filtered Learning":
@@ -445,6 +489,7 @@ class ClNeuralNetwork:
                     ind_error = error.T[indx].reshape(10,1)
                     for layer in self.layers:
                         layer.weights = layer.weights + self.learning_rate * np.dot(ind_error,ind_input_sample)
+                # in this the else would be unsupervised Hebb
                 else:
                     for layer in self.layers:
                         layer.weights = layer.weights + self.learning_rate * np.dot(ind_actual_output, ind_input_sample)
@@ -475,8 +520,10 @@ class ClSingleLayer:
             min_initial_weights = self.min_initial_weights
         if max_initial_weights == None:
             max_initial_weights = self.max_initial_weights
-        self.weights = np.random.uniform(min_initial_weights, max_initial_weights,
-                                         (self.number_of_neurons, self.number_of_inputs_to_layer + 1))
+        # self.weights = np.random.uniform(min_initial_weights, max_initial_weights,
+        #                                  (self.number_of_neurons, self.number_of_inputs_to_layer + 1))
+        self.weights = np.ones([self.number_of_neurons, self.number_of_inputs_to_layer + 1],dtype=float)
+        # self.weights = np.zeros([self.number_of_neurons, self.number_of_inputs_to_layer+1],dtype=float)
 
     def calculate_output(self, input_values):
         # Calculate the output of the layer, given the input signals
@@ -512,7 +559,7 @@ if __name__ == "__main__":
     np.random.seed(1)
     ob_nn_experiment = ClNNExperiment(nn_experiment_settings)
     main_frame = Tk.Tk()
-    main_frame.title("Perceptron")
+    main_frame.title("Hebb Learning Rule")
     main_frame.geometry('640x480')
     ob_nn_gui_2d = ClNNGui2d(main_frame, ob_nn_experiment)
     main_frame.mainloop()
