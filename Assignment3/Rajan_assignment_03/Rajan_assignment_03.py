@@ -316,10 +316,13 @@ class ClNNGui2d:
         temp_text = self.adjust_weights_button.config('text')[-1]
         self.adjust_weights_button.config(text='Please Wait')
         for k in range(self.number_of_epooch):
+            # first adjust the weights for all the images one at a time
             self.nn_experiment.adjust_weights()
+            # calculate the error rate by first calling the calculate output and then comparing the result
             error_rate = self.nn_experiment.calculate_error_rate()
             self.index_list.append(self.error_rate_counter+k)
             self.error_list.append(error_rate)
+            # plotting the data on the screen
             self.axes.plot(self.index_list,self.error_list)
             self.canvas.draw()
         self.error_rate_counter +=self.number_of_epooch
@@ -461,12 +464,6 @@ class ClNeuralNetwork:
         else:
             tmp_samples = np.vstack([input_samples, np.ones((1, input_samples.shape[1]), float)])
 
-        print "actual output"
-        print actual_output
-
-        print "weights"
-        print self.layers[0].weights
-
         # checking to see if any of the hebb rule is selected
         if self.hebb_learning_variable == "Filtered Learning" or self.hebb_learning_variable == "Delta Rule" \
                 or self.hebb_learning_variable == "Unsupervised Hebb":
@@ -474,11 +471,11 @@ class ClNeuralNetwork:
             error = targets - actual_output
             # fetching the total length of the dataset
             for indx in range(tmp_samples.shape[1]):
-                ind_target = targets.T[indx].reshape(10,1)
+                ind_target = targets.T[indx].reshape(targets.shape[0],1)
                 # transpose of the input sample in [ 1 * 785]
-                ind_input_sample = tmp_samples.T[indx].reshape(1,785)
+                ind_input_sample = tmp_samples.T[indx].reshape(1,(input_samples.shape[0]+1))
                 # getting individual actual output
-                ind_actual_output = actual_output.T[indx].reshape(10,1)
+                ind_actual_output = actual_output.T[indx].reshape(targets.shape[0],1)
                 # fetching individual actual outputs and re-adjusting the dataset
                 if self.hebb_learning_variable == "Filtered Learning":
                     gamma_value = 1 - self.learning_rate
@@ -486,7 +483,7 @@ class ClNeuralNetwork:
                         correction = self.learning_rate * np.dot(ind_target,ind_input_sample)
                         layer.weights = (gamma_value * layer.weights) + correction
                 elif self.hebb_learning_variable == "Delta Rule":
-                    ind_error = error.T[indx].reshape(10,1)
+                    ind_error = error.T[indx].reshape(targets.shape[0],1)
                     for layer in self.layers:
                         layer.weights = layer.weights + self.learning_rate * np.dot(ind_error,ind_input_sample)
                 # in this the else would be unsupervised Hebb
@@ -520,9 +517,9 @@ class ClSingleLayer:
             min_initial_weights = self.min_initial_weights
         if max_initial_weights == None:
             max_initial_weights = self.max_initial_weights
-        # self.weights = np.random.uniform(min_initial_weights, max_initial_weights,
-        #                                  (self.number_of_neurons, self.number_of_inputs_to_layer + 1))
-        self.weights = np.ones([self.number_of_neurons, self.number_of_inputs_to_layer + 1],dtype=float)
+        self.weights = np.random.uniform(min_initial_weights, max_initial_weights,
+                                         (self.number_of_neurons, self.number_of_inputs_to_layer + 1))
+        # self.weights = np.ones([self.number_of_neurons, self.number_of_inputs_to_layer + 1],dtype=float)
         # self.weights = np.zeros([self.number_of_neurons, self.number_of_inputs_to_layer+1],dtype=float)
 
     def calculate_output(self, input_values):
