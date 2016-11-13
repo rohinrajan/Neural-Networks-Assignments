@@ -10,6 +10,7 @@ import theano.tensor as T
 from os import listdir
 from os.path import isfile,join
 import matplotlib.pyplot as plt
+import display_confusion_matrix as displayConfusionMatrix
 
 class clCifarDataSet:
 		# read the dataset and generate the train and test values
@@ -83,16 +84,17 @@ def update_weights(W1,W2, dw1, dw2, learning_rate):
 if __name__ =="__main__":
 	
 	# defining the hyper parameters and reading the train and targets matrix for it
-	number_of_hidden_layer_nodes = 300
+	number_of_hidden_layer_nodes = 100
 	output_layer_size = 10
 	train_data = clCifarDataSet().trainInputDataSet
 	target_output = clCifarDataSet().trainTargetDataSet
 	num_of_inputs = train_data.shape[0]
 	alpha = 0.01
+	num_of_epochs = 200
 	
 	# initalizing the weights for both the layers
-	W1 = theano.shared(np.random.uniform(-0.0001,0.0001,(number_of_hidden_layer_nodes, num_of_inputs)), name="w1")
-	W2 = theano.shared(np.random.uniform(-0.0001,0.0001,(output_layer_size, number_of_hidden_layer_nodes)), name="w2")
+	W1 = theano.shared(np.random.uniform(-0.1,0.1,(number_of_hidden_layer_nodes, num_of_inputs)), name="w1")
+	W2 = theano.shared(np.random.uniform(-0.1,0.1,(output_layer_size, number_of_hidden_layer_nodes)), name="w2")
 	
 	# declaring the input (X) and output (Y)
 	X = T.dmatrix('X')
@@ -121,11 +123,9 @@ if __name__ =="__main__":
 	
 	total = len(transpose_train)
 	
-	# confusion matrix initialization
-	#confusion_matrix = np.zeros(shape=(output_layer_size,output_layer_size))
 	error_rate_list = []
 	cost_list = []
-	for iteration in range(200):
+	for iteration in range(num_of_epochs):
 		print "iteration = " + str(iteration)
 		count = 0
 		for indx in range(total):
@@ -136,23 +136,53 @@ if __name__ =="__main__":
 			actual_output = np.argmax(target_value)
 			if pred_output != actual_output:
 				count +=1
-			#confusion_matrix[actual_output,pred_output] = confusion_matrix[actual_output,pred_output] + 1
 		error_rate = (count/float(total))*100.0
 		error_rate_list.append(error_rate)
 		cost_list.append(c1)
 		print "Error Rate = " + str(error_rate)
-		#print confusion_matrix
+	
+	# now using the test data for calculating the error rate and generating the confusion matrix
+	# first fetching the test data and targets vector
+	test_input_data = clCifarDataSet().testInputDataSet
+	test_target_data = clCifarDataSet().testTargetDataSet
+	
+	transposed_test_input_data = test_input_data.T
+	transposed_test_target_data = test_target_data.T
+	
+	# confusion matrix initialization
+	confusion_matrix = np.zeros(shape=(output_layer_size,output_layer_size))
+	count = 0
+	total = len(transposed_test_input_data)
+	print "Now iterating through the test data and getting the predicted values"
+	for indx in range(total):
+		test_input = transposed_test_input_data[indx].reshape(num_of_inputs,1)
+		test_target = transposed_test_target_data[indx].reshape(output_layer_size,1)
+		pred_output = predict(test_input)
+		actual_output = np.argmax(test_target)
+		if pred_output != actual_output:
+			count+=1
+		confusion_matrix[actual_output,pred_output] +=1
+	# calculating the error rate for the test data
+	error_rate = (count/float(total))*100.0
+	print "The error rate for the test data is"
+	print error_rate
+	
+	print "Printing the confusion matrix for the test data"
+	print confusion_matrix
+	displayConfusionMatrix.display_confusion_matrix(confusion_matrix)
+	
 	
 	# plotting the graph for error rate 
-	iteration = range(200)
+	iteration = range(num_of_epochs)
 	
+	# plotting the Error rate vs Epochs
 	plt.plot(iteration, error_rate_list)
 	plt.xlabel('Epochs')
 	plt.ylabel('Error Rate')
 	plt.grid()
 	plt.show()
 	
-	
+	# plotting the loss vs epochs
 	plt.plot(iteration, cost_list)
 	plt.xlabel('Epochs')
 	plt.ylabel('Loss function')
