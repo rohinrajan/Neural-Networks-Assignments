@@ -12,9 +12,15 @@ from os.path import isfile,join
 import matplotlib.pyplot as plt
 
 class clCifarDataSet:
+		# read the dataset and generate the train and test values
 		def __init__(self):
-			split_ratio = .8
-			mypath = join("cifar_data_100_10","train")
+			mytrain_path = join("cifar_data_100_10","train")
+			mytest_path = join("cifar_data_100_10","test")
+			self.trainInputDataSet, self.trainTargetDataSet = self.read_data(mytrain_path)
+			self.testInputDataSet,self.testTargetDataSet = self.read_data(mytest_path)
+			
+		# function that would generate the train data and targets for that input
+		def read_data(self, mypath):
 			onlyfiles = [f for f in listdir(mypath) if isfile(join(mypath, f))]
 			# get the list of files in the folder
 			# small cifar dataset
@@ -22,23 +28,24 @@ class clCifarDataSet:
 			# taking the first image to get the dimension of the image
 			input_file_dimension = self.read_cifar_images(files_in_dataset[0]).shape
 			# creating the new empty array 
-			train_value = np.empty(shape=(input_file_dimension[0],0))
+			inputDataSet = np.empty(shape=(input_file_dimension[0],0))
 			# iterating through the list of files 
 			for file_path in files_in_dataset:
 				# appending the values to train data set
-				train_value = np.hstack((train_value, self.read_cifar_images(file_path)))
-			self.trainDataSet = train_value
+				inputDataSet = np.hstack((inputDataSet, self.read_cifar_images(file_path)))
 			# now generating the output values for image
-			self.targetDataSet = np.empty(shape=(10,0))
+			targetDataSet = np.empty(shape=(10,0))
 			target_values = [f.split("_")[0] for f in listdir(mypath) if isfile(join(mypath, f))]
 			# iterate through the target values and append the value to the target matrix
 			for target in target_values:
 				new_value = np.zeros(shape=(10,1))
 				new_value[target] = 1
-				self.targetDataSet = np.hstack((self.targetDataSet, new_value))
+				targetDataSet = np.hstack((targetDataSet, new_value))
 			# shuffling both the training as well as test data first transposing but returing the orignal dataset dimensions
-			self.trainDataSet, self.targetDataSet = self.shuffle_in_unison(self.trainDataSet.T,self.targetDataSet.T)
-		
+			inputDataSet, targetDataSet = self.shuffle_in_unison(inputDataSet.T, targetDataSet.T)
+			return inputDataSet, targetDataSet
+			
+		# function that reads the cifar images	
 		def read_cifar_images(self,filename):
 			return readimg.read_one_image_and_convert_to_vector(filename)
 			
@@ -54,11 +61,11 @@ class clCifarDataSet:
 				# return the transposed values
 			return shuffled_input.T, shuffled_target.T
 			
-			
 
 def model(X, w1, w2):
 	# layer 1
 	net1 = T.dot(w1,X)
+	#net1 = T.nnet.sigmoid(net1)
 	net1 = T.nnet.relu(net1)
 	
 	# layer 2
@@ -66,23 +73,24 @@ def model(X, w1, w2):
 	net2 = T.nnet.softmax(net2.T)
 	return net2.T,net1
 	
-	
-def update_weights(W1,W2, dw1, dw2):
+	# function that updates the weights based on the learning rate as well as the gradient calculated
+def update_weights(W1,W2, dw1, dw2, learning_rate):
 	return_list= []
-	return_list.append((W1, W1 - 0.01 *dw1))
-	return_list.append((W2, W2 - 0.01 *dw2))
+	return_list.append((W1, W1 - learning_rate*dw1))
+	return_list.append((W2, W2 - learning_rate*dw2))
 	return return_list
 			
 if __name__ =="__main__":
-	number_of_hidden_layer_nodes = 100
+	
+	# defining the hyper parameters and reading the train and targets matrix for it
+	number_of_hidden_layer_nodes = 300
 	output_layer_size = 10
-	train_data = clCifarDataSet().trainDataSet
-	target_output = clCifarDataSet().targetDataSet
+	train_data = clCifarDataSet().trainInputDataSet
+	target_output = clCifarDataSet().trainTargetDataSet
 	num_of_inputs = train_data.shape[0]
+	alpha = 0.01
 	
 	# initalizing the weights for both the layers
-	#W1 = theano.shared(0.001* np.random.randn(number_of_hidden_layer_nodes, num_of_inputs),name="w1")
-	#W2 = theano.shared(0.001* np.random.randn(output_layer_size, number_of_hidden_layer_nodes),name="w2")
 	W1 = theano.shared(np.random.uniform(-0.0001,0.0001,(number_of_hidden_layer_nodes, num_of_inputs)), name="w1")
 	W2 = theano.shared(np.random.uniform(-0.0001,0.0001,(output_layer_size, number_of_hidden_layer_nodes)), name="w2")
 	
@@ -100,10 +108,8 @@ if __name__ =="__main__":
 	# calculating the gradient value wrt to the weights for the hidden as well as the output layer
 	dw1,dw2 = T.grad(cost, wrt=[W1,W2])
 	# now updating the shared weights based on the gradient descent
-	updates = update_weights(W1,W2,dw1,dw2)
+	updates = update_weights(W1,W2,dw1,dw2,alpha)
 	
-	#loss_function = theano.function([temp,Y],cost)
-	#print loss_function(net2,target_output)
 	# creating the train function for the entire network
 	train = theano.function(inputs=[X,Y],outputs=[cost,dw1,dw2,net_value], updates=updates)
 	# predicting the target value 
@@ -114,7 +120,6 @@ if __name__ =="__main__":
 	transpose_target = target_output.T	
 	
 	total = len(transpose_train)
-	print "total =" + str(total)
 	
 	# confusion matrix initialization
 	#confusion_matrix = np.zeros(shape=(output_layer_size,output_layer_size))
@@ -155,7 +160,13 @@ if __name__ =="__main__":
 	plt.show()
 	
 	
-	#for indx in range(30):
+	
+	
+	
+	
+	
+	#--------------------------------------------------------------------------Debugging
+	#for indx in range(2):
 		#train_value = transpose_train[indx].reshape(num_of_inputs,1)
 		#target_value = transpose_target[indx].reshape(10,1)
 		#a1,b1,c1,d1,d2 = train(train_value,target_value)
@@ -179,4 +190,32 @@ if __name__ =="__main__":
 	#print "target matrix"
 	#print target_output
 	
-	
+	#train_value = readimg.read_one_image_and_convert_to_vector("cifar_data_100_10/train/2_32.png")
+	#train_value = np.hstack((train_value, readimg.read_one_image_and_convert_to_vector("cifar_data_100_10/train/1_32.png")))
+	#test_value = np.zeros(shape=(10,1))
+	#test_value[2] = 1
+	#test_1 = np.zeros(shape=(10,1))
+	#test_1[1] = 1
+	#test_value = np.hstack((test_value, test_1))
+	#for indx in range(2):
+		#a1,b1,c1,d1,d2,w1,w2 = train(train_value.T[indx].reshape(3072,1),test_value.T[indx].reshape(10,1))
+		#print "cost"
+		#print a1
+		#print "dw1"
+		#print b1
+		#print "dw2"
+		#print c1
+		#print "output of layer2"
+		#print d1
+		#print "softmax value of layer2"
+		#print softmax(np.dot(w2,d2))
+		#print "output of layer1"
+		#print d2
+		#print "W1"
+		#print w1
+		#print "W2"
+		#print w2
+		#print "input"
+		#print train_value.T[indx].reshape(3072,1)
+		#print "target"
+		#print test_value.T[indx].reshape(10,1)
