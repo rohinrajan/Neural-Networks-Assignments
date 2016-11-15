@@ -1,6 +1,6 @@
 # Rajan, Rohin
 # 1001-154-037
-# 2016-11-13
+# 2016-11-15
 # Assignment_05
 
 import numpy as np
@@ -11,18 +11,22 @@ from os import listdir
 from os.path import isfile,join
 import matplotlib.pyplot as plt
 import display_confusion_matrix as displayConfusionMatrix
+import sys
+#sys.stdout = open('test1.txt','w')
 
 class clCifarDataSet:
 		# read the dataset and generate the train and test values
 		def __init__(self):
-			mytrain_path = join("cifar_data_100_10","train")
-			mytest_path = join("cifar_data_100_10","test")
+			mytrain_path = join("cifar_data_1000_100","train")
+			mytest_path = join("cifar_data_1000_100","test")
 			self.trainInputDataSet, self.trainTargetDataSet = self.read_data(mytrain_path)
+			print "done reading the training data"
 			self.testInputDataSet,self.testTargetDataSet = self.read_data(mytest_path)
+			print "done reading the testing data"
 			
 		# function that would generate the train data and targets for that input
 		def read_data(self, mypath):
-			onlyfiles = [f for f in listdir(mypath) if isfile(join(mypath, f))]
+			#onlyfiles = [f for f in listdir(mypath) if isfile(join(mypath, f))]
 			# get the list of files in the folder
 			# small cifar dataset
 			files_in_dataset = [join(mypath, f) for f in listdir(mypath) if isfile(join(mypath, f))]
@@ -30,17 +34,15 @@ class clCifarDataSet:
 			input_file_dimension = self.read_cifar_images(files_in_dataset[0]).shape
 			# creating the new empty array 
 			inputDataSet = np.empty(shape=(input_file_dimension[0],0))
-			# iterating through the list of files 
-			for file_path in files_in_dataset:
-				# appending the values to train data set
-				inputDataSet = np.hstack((inputDataSet, self.read_cifar_images(file_path)))
 			# now generating the output values for image
 			targetDataSet = np.empty(shape=(10,0))
 			target_values = [f.split("_")[0] for f in listdir(mypath) if isfile(join(mypath, f))]
-			# iterate through the target values and append the value to the target matrix
-			for target in target_values:
+			# iterating through the list of files 
+			for file_indx in range(len(files_in_dataset)):
+				# appending the values to train data set
+				inputDataSet = np.hstack((inputDataSet, self.read_cifar_images(files_in_dataset[file_indx])))
 				new_value = np.zeros(shape=(10,1))
-				new_value[target] = 1
+				new_value[target_values[file_indx]] = 1
 				targetDataSet = np.hstack((targetDataSet, new_value))
 			# shuffling both the training as well as test data first transposing but returing the orignal dataset dimensions
 			inputDataSet, targetDataSet = self.shuffle_in_unison(inputDataSet.T, targetDataSet.T)
@@ -64,12 +66,12 @@ class clCifarDataSet:
 			
 
 def model(X, w1, w2):
-	# layer 1
+	# layer 1 hidden layer
 	net1 = T.dot(w1,X)
 	#net1 = T.nnet.sigmoid(net1)
 	net1 = T.nnet.relu(net1)
 	
-	# layer 2
+	# layer 2 output layer
 	net2 = T.dot(w2,net1)
 	net2 = T.nnet.softmax(net2.T)
 	return net2.T,net1
@@ -84,21 +86,23 @@ def update_weights(W1,W2, dw1, dw2, learning_rate):
 if __name__ =="__main__":
 	
 	# defining the hyper parameters and reading the train and targets matrix for it
-	number_of_hidden_layer_nodes = 100
+	number_of_hidden_layer_nodes = 25
 	output_layer_size = 10
 	train_data = clCifarDataSet().trainInputDataSet
 	target_output = clCifarDataSet().trainTargetDataSet
 	num_of_inputs = train_data.shape[0]
 	alpha = 0.01
 	num_of_epochs = 200
+	initial_weights = 0.0001
+	lambda_value = 0.5
 	
 	# initalizing the weights for both the layers
-	W1 = theano.shared(np.random.uniform(-0.1,0.1,(number_of_hidden_layer_nodes, num_of_inputs)), name="w1")
-	W2 = theano.shared(np.random.uniform(-0.1,0.1,(output_layer_size, number_of_hidden_layer_nodes)), name="w2")
+	W1 = theano.shared(np.random.uniform(-initial_weights,initial_weights,(number_of_hidden_layer_nodes, num_of_inputs)), name="w1")
+	W2 = theano.shared(np.random.uniform(-initial_weights,initial_weights,(output_layer_size, number_of_hidden_layer_nodes)), name="w2")
 	
 	# declaring the input (X) and output (Y)
-	X = T.dmatrix('X')
-	Y = T.dmatrix('Y')
+	X = T.matrix('X',dtype='float64')
+	Y = T.matrix('Y',dtype='float64')
 	
 	# calculating the output of the neurons
 	net_value, layer1_output = model(X,W1,W2)
@@ -106,6 +110,8 @@ if __name__ =="__main__":
 	y_pred = T.argmax(net_value)
 	
 	cost = T.mean(T.nnet.categorical_crossentropy(net_value, Y))
+	# regularization
+	cost += lambda_value * (T.sum(T.sqr(W1)) + T.sum(T.sqr(W2)))
 	
 	# calculating the gradient value wrt to the weights for the hidden as well as the output layer
 	dw1,dw2 = T.grad(cost, wrt=[W1,W2])
@@ -122,12 +128,13 @@ if __name__ =="__main__":
 	transpose_target = target_output.T	
 	
 	total = len(transpose_train)
-	
+	print "total length of train is = " + str(total)
 	error_rate_list = []
 	cost_list = []
 	for iteration in range(num_of_epochs):
 		print "iteration = " + str(iteration)
 		count = 0
+		inner_cost = []
 		for indx in range(total):
 			train_value = transpose_train[indx].reshape(num_of_inputs,1)
 			target_value = transpose_target[indx].reshape(output_layer_size,1)
@@ -136,10 +143,12 @@ if __name__ =="__main__":
 			actual_output = np.argmax(target_value)
 			if pred_output != actual_output:
 				count +=1
+			inner_cost.append(c1)
 		error_rate = (count/float(total))*100.0
 		error_rate_list.append(error_rate)
-		cost_list.append(c1)
+		cost_list.append(np.mean(inner_cost))
 		print "Error Rate = " + str(error_rate)
+		print "Cost Mean = " + str(np.mean(inner_cost))
 	
 	# now using the test data for calculating the error rate and generating the confusion matrix
 	# first fetching the test data and targets vector
@@ -151,21 +160,28 @@ if __name__ =="__main__":
 	
 	# confusion matrix initialization
 	confusion_matrix = np.zeros(shape=(output_layer_size,output_layer_size))
-	count = 0
-	total = len(transposed_test_input_data)
+	count_test = 0
+	total_test = len(transposed_test_input_data)
 	print "Now iterating through the test data and getting the predicted values"
-	for indx in range(total):
+	print "total len for test is = " + str(total_test)
+	for indx in range(total_test):
 		test_input = transposed_test_input_data[indx].reshape(num_of_inputs,1)
 		test_target = transposed_test_target_data[indx].reshape(output_layer_size,1)
-		pred_output = predict(test_input)
-		actual_output = np.argmax(test_target)
-		if pred_output != actual_output:
-			count+=1
-		confusion_matrix[actual_output,pred_output] +=1
+		pred_output_test = predict(test_input)
+		actual_output_test = np.argmax(test_target)
+		print "pred output"
+		print pred_output_test
+		print "actual output"
+		print actual_output_test
+		if pred_output_test != actual_output_test:
+			count_test+=1
+		confusion_matrix[actual_output_test,pred_output_test] +=1
 	# calculating the error rate for the test data
-	error_rate = (count/float(total))*100.0
+	error_rate_test = (count_test/float(total_test))*100.0
+	print "test count"
+	print count_test
 	print "The error rate for the test data is"
-	print error_rate
+	print error_rate_test
 	
 	print "Printing the confusion matrix for the test data"
 	print confusion_matrix
@@ -220,8 +236,8 @@ if __name__ =="__main__":
 	#print "target matrix"
 	#print target_output
 	
-	#train_value = readimg.read_one_image_and_convert_to_vector("cifar_data_100_10/train/2_32.png")
-	#train_value = np.hstack((train_value, readimg.read_one_image_and_convert_to_vector("cifar_data_100_10/train/1_32.png")))
+	#train_value = readimg.read_one_image_and_convert_to_vector("cifar_data_100_10/train/2_72.png")
+	#train_value = np.hstack((train_value, readimg.read_one_image_and_convert_to_vector("cifar_data_100_10/train/1_72.png")))
 	#test_value = np.zeros(shape=(10,1))
 	#test_value[2] = 1
 	#test_1 = np.zeros(shape=(10,1))
@@ -237,8 +253,8 @@ if __name__ =="__main__":
 		#print c1
 		#print "output of layer2"
 		#print d1
-		#print "softmax value of layer2"
-		#print softmax(np.dot(w2,d2))
+		##print "softmax value of layer2"
+		##print softmax(np.dot(w2,d2))
 		#print "output of layer1"
 		#print d2
 		#print "W1"
