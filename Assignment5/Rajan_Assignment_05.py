@@ -86,15 +86,16 @@ def update_weights(W1,W2, dw1, dw2, learning_rate):
 if __name__ =="__main__":
 	
 	# defining the hyper parameters and reading the train and targets matrix for it
-	number_of_hidden_layer_nodes = 25
+	number_of_hidden_layer_nodes = 75
 	output_layer_size = 10
-	train_data = clCifarDataSet().trainInputDataSet
-	target_output = clCifarDataSet().trainTargetDataSet
+	clobj = clCifarDataSet()
+	train_data = clobj.trainInputDataSet
+	target_output = clobj.trainTargetDataSet
 	num_of_inputs = train_data.shape[0]
 	alpha = 0.01
-	num_of_epochs = 200
+	num_of_epochs = 100
 	initial_weights = 0.0001
-	lambda_value = 0.5
+	lambda_value = 0.1
 	
 	# initalizing the weights for both the layers
 	W1 = theano.shared(np.random.uniform(-initial_weights,initial_weights,(number_of_hidden_layer_nodes, num_of_inputs)), name="w1")
@@ -152,8 +153,8 @@ if __name__ =="__main__":
 	
 	# now using the test data for calculating the error rate and generating the confusion matrix
 	# first fetching the test data and targets vector
-	test_input_data = clCifarDataSet().testInputDataSet
-	test_target_data = clCifarDataSet().testTargetDataSet
+	test_input_data = clobj.testInputDataSet
+	test_target_data = clobj.testTargetDataSet
 	
 	transposed_test_input_data = test_input_data.T
 	transposed_test_target_data = test_target_data.T
